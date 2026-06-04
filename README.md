@@ -28,7 +28,7 @@ Exampe for armv7
 `CROSS_RUST_ARCH_TARGET="armv7-unknown-linux-gnueabihf`
 
 
-To build and pack arhitectures run.
+To build and pack cross compiled editor run.
 
 `./build_edit_deb_cross.sh`
 
