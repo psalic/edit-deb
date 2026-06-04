@@ -30,8 +30,9 @@ if [ ! -d "$RUSTUP_HOME" ] || [ ! -d "$CARGO_HOME" ]; then
     ./rustup-init -y --no-modify-path --profile minimal --default-toolchain $RUST_VERSION --default-host $(uname -m)-unknown-linux-gnu
     rm rustup-init
     cargo install cargo-deb@3.7.0
-    rustup target add $CROSS_RUST_ARCH_TARGET
 fi
+
+rustup target add $CROSS_RUST_ARCH_TARGET
 
 #download edit source code
 echo "Download and extract edit source code"
