@@ -28,6 +28,11 @@ Exampe for armv7
 `CROSS_RUST_ARCH_TARGET="armv7-unknown-linux-gnueabihf`
 
 
+It is also option to override cross compiler from commandline.
+
+`./build_edit_deb_cross.sh USER_CROSS_GCC="/usr/bin/aarch64-linux-gnu-gcc" USER_CROSS_RUST_ARCH_TARGET="aarch64-unknown-linux-gnu"`
+
+
 To build and pack cross compiled editor run.
 
 `./build_edit_deb_cross.sh`

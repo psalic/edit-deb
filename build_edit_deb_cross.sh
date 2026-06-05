@@ -1,5 +1,5 @@
 #!/bin/bash
-export SCRIPT_DIR=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
+export SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 
 export RUSTUP_HOME=$SCRIPT_DIR/rustup.msedit.cross
 export CARGO_HOME=$SCRIPT_DIR/cargo.msedit.cross
@@ -9,16 +9,30 @@ export RUST_VERSION=1.93
 #export RUST_VERSION=stable
 #export RUST_VERSION=nightly
 
-#export CROSS_GCC="/usr/bin/aarch64-linux-gnu-gcc"
-#export CROSS_RUST_ARCH_TARGET="aarch64-unknown-linux-gnu"
-
 CROSS_GCC="/usr/bin/arm-linux-gnueabihf-gcc"
-CROSS_RUST_ARCH_TARGET="armv7-unknown-linux-gnueabihf"
+CROSS_RUST_ARCH_TARGET="arm-unknown-linux-gnueabihf"
+
+for arg in "$@"; do
+    case "$arg" in
+        USER_CROSS_GCC=*)
+            USER_CROSS_GCC="${arg#*=}"
+            ;;
+        USER_CROSS_RUST_ARCH_TARGET=*)
+            USER_CROSS_RUST_ARCH_TARGET="${arg#*=}"
+            ;;
+    esac
+done
+
+if [ -n "$USER_CROSS_GCC" ] && [ -n "$USER_CROSS_RUST_ARCH_TARGET" ]; then
+    CROSS_GCC=$USER_CROSS_GCC
+    CROSS_RUST_ARCH_TARGET=$USER_CROSS_RUST_ARCH_TARGET
+    echo "Override CROSS_GCC and  CROSS_RUST_ARCH_TARGET from commandline"
+fi
 
 export CROSS_RUST_FLAG="-C linker=$CROSS_GCC"
 
 EDIT_TAR_GZ="https://github.com/microsoft/edit/archive/refs/tags/v2.0.0.tar.gz"
-EDIT_DIR="edit_cross"
+EDIT_DIR="edit_$CROSS_RUST_ARCH_TARGET"
 
 if [ ! -d "$RUSTUP_HOME" ] || [ ! -d "$CARGO_HOME" ]; then
     rm -rf $RUSTUP_HOME
