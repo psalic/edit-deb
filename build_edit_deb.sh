@@ -27,6 +27,7 @@ if [ ! -d "$RUSTUP_HOME" ] || [ ! -d "$CARGO_HOME" ]; then
     ./rustup-init -y --no-modify-path --profile minimal --default-toolchain $RUST_VERSION --default-host $CPU_ARCH-unknown-linux-gnu
     rm rustup-init
     cargo install cargo-deb@3.7.0
+    cargo install cargo-get@1.4.0
 fi
 
 
@@ -89,6 +90,6 @@ cd $SCRIPT_DIR/$EDIT_DIR && RUSTFLAGS=$CROSS_RUST_FLAG cargo build --release --t
 # pack debian package
 echo "Pack edit in debian package"
 cd $SCRIPT_DIR/$EDIT_DIR && cargo-deb --maintainer "https://github.com/psalic/edit-deb.git" --no-build --target $CROSS_RUST_ARCH_TARGET  -o $SCRIPT_DIR/dist
-
+cd $SCRIPT_DIR/$EDIT_DIR && cargo get package.version --entry crates/edit/Cargo.toml > version.txt && cp version.txt $SCRIPT_DIR/dist/version_tag.txt
 # cleanup source
 mv $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml.bak $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml

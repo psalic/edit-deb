@@ -1,0 +1,47 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Create local dist directory
+      run: |
+        mkdir -p dist
+        chmod 777 dist
+
+    - name: Build temporary Docker image
+      run: docker build -t edit-deb-builder:local .
+
+    - name: Run all builds inside the Docker container
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/src \
+          -w /src \
+          edit-deb-builder:local \
+          /bin/bash -c "
+            chmod +x build_edit_deb.sh && \
+            ./build_edit_deb.sh USER_CROSS_GCC='/usr/bin/i686-linux-gnu-gcc' USER_CROSS_RUST_ARCH_TARGET='i686-unknown-linux-gnu' && \
+            ./build_edit_deb.sh USER_CROSS_GCC='/usr/bin/aarch64-linux-gnu-gcc' USER_CROSS_RUST_ARCH_TARGET='aarch64-unknown-linux-gnu' && \
+            ./build_edit_deb.sh USER_CROSS_GCC='/usr/bin/arm-linux-gnueabihf-gcc' USER_CROSS_RUST_ARCH_TARGET='arm-unknown-linux-gnueabihf' && \
+            ./build_edit_deb.sh USER_CROSS_GCC='/usr/bin/gcc' USER_CROSS_RUST_ARCH_TARGET='x86_64-unknown-linux-gnu'
+          "
+
+    - name: Create GitHub Release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG_NAME="v$(cat dist/version_tag.txt)"
+
+        echo "Creating release with tag: $TAG_NAME"
+
+        gh release create "$TAG_NAME" dist/*.deb \
+          --title "Release $TAG_NAME"
