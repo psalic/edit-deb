@@ -1,8 +1,7 @@
 # To compile for host
-./build_edit_deb.sh
+#./build_edit_deb.sh
 
 # Cross compile examples
-./build_edit_deb.sh USER_CROSS_GCC="/usr/bin/gcc" USER_CROSS_RUST_ARCH_TARGET="i686-unknown-linux-gnu" USER_LINKARG="-m32"
 ./build_edit_deb.sh USER_CROSS_GCC="/usr/bin/i686-linux-gnu-gcc" USER_CROSS_RUST_ARCH_TARGET="i686-unknown-linux-gnu"
 
 

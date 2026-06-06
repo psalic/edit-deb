@@ -9,21 +9,29 @@ export RUST_VERSION=1.93
 #export RUST_VERSION=stable
 #export RUST_VERSION=nightly
 
+CPU_ARCH=$(uname -m)
+
+case "$CPU_ARCH" in
+    "i386")
+        CPU_ARCH="i686"
+        ;;
+esac
+
 if [ ! -d "$RUSTUP_HOME" ] || [ ! -d "$CARGO_HOME" ]; then
     rm -rf $RUSTUP_HOME
     rm -rf $CARGO_HOME
 
-    wget https://static.rust-lang.org/rustup/archive/1.28.2/$(uname -m)-unknown-linux-gnu/rustup-init
+    wget https://static.rust-lang.org/rustup/archive/1.28.2/$CPU_ARCH-unknown-linux-gnu/rustup-init
     chmod +x rustup-init
 
-    ./rustup-init -y --no-modify-path --profile minimal --default-toolchain $RUST_VERSION --default-host $(uname -m)-unknown-linux-gnu
+    ./rustup-init -y --no-modify-path --profile minimal --default-toolchain $RUST_VERSION --default-host $CPU_ARCH-unknown-linux-gnu
     rm rustup-init
     cargo install cargo-deb@3.7.0
 fi
 
 
 CROSS_GCC="/usr/bin/gcc"
-CROSS_RUST_ARCH_TARGET="$(uname -m)-unknown-linux-gnu"
+CROSS_RUST_ARCH_TARGET="$CPU_ARCH-unknown-linux-gnu"
 
 for arg in "$@"; do
     case "$arg" in
@@ -68,6 +76,7 @@ cat << 'EOF' >> $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml
 assets = [
     ["target/release/edit", "usr/bin/msedit", "755"]
 ]
+depends = "$auto, libicu-dev"
 EOF
 
 # to avoid cargo-deb warning add description in Cargo.toml
@@ -79,7 +88,7 @@ cd $SCRIPT_DIR/$EDIT_DIR && RUSTFLAGS=$CROSS_RUST_FLAG cargo build --release --t
 
 # pack debian package
 echo "Pack edit in debian package"
-cd $SCRIPT_DIR/$EDIT_DIR && cargo-deb --maintainer $(id -un) --no-build --target $CROSS_RUST_ARCH_TARGET  -o $SCRIPT_DIR
+cd $SCRIPT_DIR/$EDIT_DIR && cargo-deb --maintainer "https://github.com/psalic/edit-deb.git" --no-build --target $CROSS_RUST_ARCH_TARGET  -o $SCRIPT_DIR/dist
 
 # cleanup source
 mv $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml.bak $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml
