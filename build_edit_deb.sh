@@ -1,21 +1,42 @@
 #!/bin/bash
 export SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 
-export RUSTUP_HOME=$SCRIPT_DIR/rustup.msedit
-export CARGO_HOME=$SCRIPT_DIR/cargo.msedit
+CPU_ARCH=$(dpkg --print-architecture)
+
+case "$CPU_ARCH" in
+    "amd64")
+        CPU_ARCH="x86_64"
+        ;;
+    "arm64")
+        CPU_ARCH="aarch64"
+        ;;
+    "i386")
+        CPU_ARCH="i686"
+        ;;
+    "armhf"|"armel")
+        CPU_ARCH="arm"
+        ;;
+    "ppc64el")
+        CPU_ARCH="ppc64le"
+        ;;
+    "riscv64"|"s390x")
+        CPU_ARCH="$CPU_ARCH"
+        ;;
+    *)
+        echo "Unknown CPU arch" >&2
+        return 1
+        ;;
+
+esac
+
+export RUSTUP_HOME=$SCRIPT_DIR/rustup.msedit.$CPU_ARCH
+export CARGO_HOME=$SCRIPT_DIR/cargo.msedit.$CPU_ARCH
 export PATH=$CARGO_HOME/bin:$PATH
 export RUSTUP_INIT_SKIP_PATH_CHECK="yes"
 export RUST_VERSION=1.93
 #export RUST_VERSION=stable
 #export RUST_VERSION=nightly
 
-CPU_ARCH=$(uname -m)
-
-case "$CPU_ARCH" in
-    "i386")
-        CPU_ARCH="i686"
-        ;;
-esac
 
 if [ ! -d "$RUSTUP_HOME" ] || [ ! -d "$CARGO_HOME" ]; then
     rm -rf $RUSTUP_HOME
@@ -65,7 +86,7 @@ if [ -d "$SCRIPT_DIR/$EDIT_DIR" ]; then
 fi
 
 mkdir $SCRIPT_DIR/$EDIT_DIR
-curl -L -s $EDIT_TAR_GZ | tar -xzf - -C $SCRIPT_DIR/$EDIT_DIR --strip-components=1
+curl -k -L -s $EDIT_TAR_GZ | tar -xzf - -C $SCRIPT_DIR/$EDIT_DIR --strip-components=1
 
 # rename /usr/bin/edit in /usr/bin/msedit, /usr/bin/edit exist in debian package mailcap
 # need to change source
@@ -77,7 +98,7 @@ cat << 'EOF' >> $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml
 assets = [
     ["target/release/edit", "usr/bin/msedit", "755"]
 ]
-depends = "$auto, libicu-dev"
+recommends = "libicu-dev"
 EOF
 
 # to avoid cargo-deb warning add description in Cargo.toml
@@ -91,5 +112,7 @@ cd $SCRIPT_DIR/$EDIT_DIR && RUSTFLAGS=$CROSS_RUST_FLAG cargo build --release --t
 echo "Pack edit in debian package"
 cd $SCRIPT_DIR/$EDIT_DIR && cargo-deb --maintainer "https://github.com/psalic/edit-deb.git" --no-build --target $CROSS_RUST_ARCH_TARGET  -o $SCRIPT_DIR/dist
 cd $SCRIPT_DIR/$EDIT_DIR && cargo get package.version --entry crates/edit/Cargo.toml > version.txt && cp version.txt $SCRIPT_DIR/dist/version_tag.txt
+cd $SCRIPT_DIR/$EDIT_DIR && cp target/$CROSS_RUST_ARCH_TARGET/release/edit $SCRIPT_DIR/dist/edit_$(cat $SCRIPT_DIR/dist/version_tag.txt)_$CROSS_RUST_ARCH_TARGET
+
 # cleanup source
 mv $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml.bak $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml

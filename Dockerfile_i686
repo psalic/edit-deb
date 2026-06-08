@@ -1,10 +1,8 @@
-from ubuntu:14.04
+from i386/ubuntu:14.04
 maintainer psalic
 
 # install ubuntu packages
 run apt-get update && apt-get install -y \
-    gcc-aarch64-linux-gnu \
-    gcc-arm-linux-gnueabihf \
     gcc \
     curl \
     wget \

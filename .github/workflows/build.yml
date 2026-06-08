@@ -1,47 +1,115 @@
-name: Build and Release
+name: Multi-Arch Rust Build
 
 on:
   workflow_dispatch:
+    inputs:
+      architecture:
+        description: 'Choose which architecture to build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - x86_64-unknown-linux-gnu
+          - i686-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+          - arm-unknown-linux-gnueabihf
+      release_tag:
+        description: 'Release Tag Name (e.g., v1.0.0). Leave blank to skip creating a GitHub Release.'
+        required: false
+        type: string
+        default: ''
 
 jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          # Define all possible target profiles
+          ALL_TARGETS='[
+            {"target": "i686-unknown-linux-gnu", "gcc": "/usr/bin/gcc", "dockerfile": "Dockerfile_i686"},
+            {"target": "x86_64-unknown-linux-gnu", "gcc": "/usr/bin/gcc", "dockerfile": "Dockerfile"},
+            {"target": "aarch64-unknown-linux-gnu", "gcc": "/usr/bin/aarch64-linux-gnu-gcc", "dockerfile": "Dockerfile"},
+            {"target": "arm-unknown-linux-gnueabihf", "gcc": "/usr/bin/arm-linux-gnueabihf-gcc", "dockerfile": "Dockerfile"}
+          ]'
+
+          SELECTION="${{ github.event.inputs.architecture }}"
+
+          echo "matrix<<EOF" >> $GITHUB_OUTPUT
+
+          if [ "$SELECTION" = "all" ]; then
+            echo "$ALL_TARGETS" >> $GITHUB_OUTPUT
+          else
+            FILTERED=$(echo "$ALL_TARGETS" | jq -c --arg target "$SELECTION" '.[] | select(.target == $target)')
+            echo "[$FILTERED]" >> $GITHUB_OUTPUT
+          fi
+
+          echo "EOF" >> $GITHUB_OUTPUT
+
+
+  # STEP 2: The actual build matrix now only receives the filtered targets
   build:
+    needs: setup-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs['setup-matrix'].outputs.matrix) }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build Docker Container Environment
+      run: |
+        docker build -f ${{ matrix.dockerfile }} -t edit-builder-${{ matrix.target }} .
+
+    - name: Run Build Script in Docker Container
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          edit-builder-${{ matrix.target }} \
+          ./build_edit_deb.sh USER_CROSS_GCC="${{ matrix.gcc }}" USER_CROSS_RUST_ARCH_TARGET="${{ matrix.target }}"
+
+    - name: Upload temporary artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bin-deb-packages-${{ matrix.target }}
+        path: |
+          dist/*
+          !**/*.txt
+
+  # STEP 3: Create GitHub Release if user provided a tag
+  create-release:
+    needs: build
+    if: ${{ github.event.inputs.release_tag != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
     steps:
-    - name: Checkout repository
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Create local dist directory
+    - name: Download all stashed artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: release-artifacts/
+        merge-multiple: true
+
+    - name: Clean asset directory structure
       run: |
-        mkdir -p dist
-        chmod 777 dist
+        mkdir -p final-assets
+        find release-artifacts/ -type f -exec mv {} final-assets/ \;
 
-    - name: Build temporary Docker image
-      run: docker build -t edit-deb-builder:local .
-
-    - name: Run all builds inside the Docker container
-      run: |
-        docker run --rm \
-          -v ${{ github.workspace }}:/src \
-          -w /src \
-          edit-deb-builder:local \
-          /bin/bash -c "
-            chmod +x build_edit_deb.sh && \
-            ./build_edit_deb.sh USER_CROSS_GCC='/usr/bin/i686-linux-gnu-gcc' USER_CROSS_RUST_ARCH_TARGET='i686-unknown-linux-gnu' && \
-            ./build_edit_deb.sh USER_CROSS_GCC='/usr/bin/aarch64-linux-gnu-gcc' USER_CROSS_RUST_ARCH_TARGET='aarch64-unknown-linux-gnu' && \
-            ./build_edit_deb.sh USER_CROSS_GCC='/usr/bin/arm-linux-gnueabihf-gcc' USER_CROSS_RUST_ARCH_TARGET='arm-unknown-linux-gnueabihf' && \
-            ./build_edit_deb.sh USER_CROSS_GCC='/usr/bin/gcc' USER_CROSS_RUST_ARCH_TARGET='x86_64-unknown-linux-gnu'
-          "
-
-    - name: Create GitHub Release
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        TAG_NAME="v$(cat dist/version_tag.txt)"
-
-        echo "Creating release with tag: $TAG_NAME"
-
-        gh release create "$TAG_NAME" dist/*.deb \
-          --title "Release $TAG_NAME"
+    - name: Create GitHub Release and Upload Assets
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.inputs.release_tag }}
+        name: Release ${{ github.event.inputs.release_tag }}
+        draft: false
+        prerelease: false
+        files: |
+          final-assets/*
