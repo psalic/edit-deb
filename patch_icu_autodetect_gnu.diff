@@ -1,0 +1,37 @@
+diff --git a/crates/edit/src/sys/unix.rs b/crates/edit/src/sys/unix.rs
+index 34683ac..7ac4fae 100644
+--- a/crates/edit/src/sys/unix.rs
++++ b/crates/edit/src/sys/unix.rs
+@@ -439,24 +439,16 @@ pub fn icu_detect_renaming_suffix(arena: &Arena, handle: NonNull<c_void>) -> BSt
+             return res;
+         }
+ 
+-        // In the versions (63-76) and distributions (Arch/Debian) I tested,
+-        // this symbol seems to be always present. This allows us to call `dladdr`.
+-        // It's the `UCaseMap::~UCaseMap()` destructor which for some reason isn't
+-        // in a namespace. Thank you ICU maintainers for this oversight.
+-        let proc = match get_proc_address::<T>(handle, c"_ZN8UCaseMapD1Ev".as_ptr()) {
+-            Ok(proc) => proc,
+-            Err(_) => return res,
+-        };
+-
+-        // `dladdr` is specific to GNU's libc unfortunately.
+-        let mut info: libc::Dl_info = mem::zeroed();
+-        let ret = libc::dladdr(proc, &mut info);
+-        if ret == 0 {
+-            return res;
++        #[repr(C)]
++        struct InternalLinkMap {
++            l_addr: usize,
++            l_name: *mut std::os::raw::c_char,
+         }
++        let info = &*(handle.as_ptr() as *const InternalLinkMap);
++
+ 
+-        // The library path is in `info.dli_fname`.
+-        let path = match std::ffi::CStr::from_ptr(info.dli_fname).to_str() {
++        // The library path is in `info.l_name`.
++        let path = match std::ffi::CStr::from_ptr(info.l_name).to_str() {
+             Ok(name) => name,
+             Err(_) => return res,
+         };

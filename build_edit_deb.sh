@@ -104,6 +104,10 @@ EOF
 # to avoid cargo-deb warning add description in Cargo.toml
 sed -i '/\[package\]/a description = "A simple editor for simple needs"' $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml
 
+
+# fix icu autodetect
+cd $SCRIPT_DIR/$EDIT_DIR && patch -p1 < $SCRIPT_DIR/patch_icu_autodetect_gnu.diff
+
 # build edit
 echo "Build edit"
 cd $SCRIPT_DIR/$EDIT_DIR && RUSTFLAGS=$CROSS_RUST_FLAG cargo build --release --target $CROSS_RUST_ARCH_TARGET
@@ -115,4 +119,4 @@ cd $SCRIPT_DIR/$EDIT_DIR && cargo get package.version --entry crates/edit/Cargo.
 cd $SCRIPT_DIR/$EDIT_DIR && cp target/$CROSS_RUST_ARCH_TARGET/release/edit $SCRIPT_DIR/dist/edit_$(cat $SCRIPT_DIR/dist/version_tag.txt)_$CROSS_RUST_ARCH_TARGET
 
 # cleanup source
-mv $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml.bak $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml
+#mv $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml.bak $SCRIPT_DIR/$EDIT_DIR/crates/edit/Cargo.toml

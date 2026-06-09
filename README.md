@@ -42,6 +42,18 @@ In releases there also binary files of Microsoft edit with architecture in name.
 
 # Recomended
 To have full experience of Microsoft editor install package bellow in Debian/Ubuntu.  
-It works for Ubuntu 18.04 and above.
+~~It works for Ubuntu 18.04 and above~~  Fixed with patch_icu_autodetect_gnu.diff.
 
 `libicu-dev`
+
+
+You can force version of libicu for edit.
+You need to compile it yourself as bellow.  
+`export EDIT_CFG_ICU_RENAMING_AUTO_DETECT="false"`  
+`export EDIT_CFG_ICU_RENAMING_VERSION="52"`  
+`./build_edit_deb.sh USER_CROSS_GCC=...`
+
+In above example version 52 of libicu is installed in Ubuntu14.04
+You can check required version:  
+`ls -al /usr/lib/x86_64-linux-gnu/libicuuc.so`  
+`/usr/lib/x86_64-linux-gnu/libicuuc.so -> libicuuc.so.52.1`
