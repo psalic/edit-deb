@@ -1,8 +1,8 @@
 diff --git a/crates/edit/src/sys/unix.rs b/crates/edit/src/sys/unix.rs
-index 34683ac..7ac4fae 100644
+index 1d51fa6..a354e53 100644
 --- a/crates/edit/src/sys/unix.rs
 +++ b/crates/edit/src/sys/unix.rs
-@@ -439,24 +439,16 @@ pub fn icu_detect_renaming_suffix(arena: &Arena, handle: NonNull<c_void>) -> BSt
+@@ -439,24 +439,44 @@ pub fn icu_detect_renaming_suffix(arena: &Arena, handle: NonNull<c_void>) -> BSt
              return res;
          }
  
@@ -14,24 +14,50 @@ index 34683ac..7ac4fae 100644
 -            Ok(proc) => proc,
 -            Err(_) => return res,
 -        };
--
++        let mut dli_fname: *const c_char = std::ptr::null();
++
++
++        extern "C" fn dl_callback(
++            info: *mut libc::dl_phdr_info,
++            _size: usize,
++            data: *mut c_void,
++        ) -> c_int {
++            let file_path = unsafe { &mut *(data as *mut *const c_char) };
++
++            if info.is_null() || unsafe { (*info).dlpi_name.is_null() } {
++                return 0;
++            }
++
++            let dlpi_str = unsafe { std::ffi::CStr::from_ptr((*info).dlpi_name) };
+ 
 -        // `dladdr` is specific to GNU's libc unfortunately.
 -        let mut info: libc::Dl_info = mem::zeroed();
 -        let ret = libc::dladdr(proc, &mut info);
 -        if ret == 0 {
--            return res;
-+        #[repr(C)]
-+        struct InternalLinkMap {
-+            l_addr: usize,
-+            l_name: *mut std::os::raw::c_char,
-         }
-+        let info = &*(handle.as_ptr() as *const InternalLinkMap);
++            if let Ok(s) = dlpi_str.to_str() {
++                if s.contains("libicuuc") {
++                    *file_path = dlpi_str.as_ptr();
++                    return 1;
++                }
++            }
 +
++            0
++        }
++
++        let ret = libc::dl_iterate_phdr(
++                Some(dl_callback),
++                &mut dli_fname as *mut *const c_char as *mut c_void
++            );
++
++        if ret == 0 || dli_fname.is_null() {
+             return res;
+         }
  
 -        // The library path is in `info.dli_fname`.
 -        let path = match std::ffi::CStr::from_ptr(info.dli_fname).to_str() {
-+        // The library path is in `info.l_name`.
-+        let path = match std::ffi::CStr::from_ptr(info.l_name).to_str() {
++
++        // The library path is in `dli_fname`.
++        let path = match std::ffi::CStr::from_ptr(dli_fname).to_str() {
              Ok(name) => name,
              Err(_) => return res,
          };
