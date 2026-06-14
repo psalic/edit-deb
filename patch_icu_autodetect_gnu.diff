@@ -1,8 +1,47 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 4afe7a2..d43d7f2 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -258,6 +258,7 @@ dependencies = [
+  "criterion",
+  "libc",
+  "lsh",
++ "mach2",
+  "stdext",
+  "toml-span",
+  "windows-sys",
+@@ -397,6 +398,12 @@ dependencies = [
+  "stdext",
+ ]
+ 
++[[package]]
++name = "mach2"
++version = "0.6.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
++
+ [[package]]
+ name = "memchr"
+ version = "2.8.0"
+diff --git a/crates/edit/Cargo.toml b/crates/edit/Cargo.toml
+index 02becfd..50c6ec6 100644
+--- a/crates/edit/Cargo.toml
++++ b/crates/edit/Cargo.toml
+@@ -25,6 +25,9 @@ stdext.workspace = true
+ [target.'cfg(unix)'.dependencies]
+ libc = "0.2"
+ 
++[target.'cfg(target_vendor = "apple")'.dependencies]
++mach2 = "0.6"
++
+ [build-dependencies]
+ stdext.workspace = true
+ lsh.workspace = true
 diff --git a/crates/edit/src/sys/unix.rs b/crates/edit/src/sys/unix.rs
-index 1d51fa6..a354e53 100644
+index 1d51fa6..12cefab 100644
 --- a/crates/edit/src/sys/unix.rs
 +++ b/crates/edit/src/sys/unix.rs
-@@ -439,24 +439,44 @@ pub fn icu_detect_renaming_suffix(arena: &Arena, handle: NonNull<c_void>) -> BSt
+@@ -439,26 +439,66 @@ pub fn icu_detect_renaming_suffix(arena: &Arena, handle: NonNull<c_void>) -> BSt
              return res;
          }
  
@@ -14,50 +53,95 @@ index 1d51fa6..a354e53 100644
 -            Ok(proc) => proc,
 -            Err(_) => return res,
 -        };
-+        let mut dli_fname: *const c_char = std::ptr::null();
-+
-+
-+        extern "C" fn dl_callback(
-+            info: *mut libc::dl_phdr_info,
-+            _size: usize,
-+            data: *mut c_void,
-+        ) -> c_int {
-+            let file_path = unsafe { &mut *(data as *mut *const c_char) };
-+
-+            if info.is_null() || unsafe { (*info).dlpi_name.is_null() } {
-+                return 0;
-+            }
-+
-+            let dlpi_str = unsafe { std::ffi::CStr::from_ptr((*info).dlpi_name) };
++        const TARGET_LIBICU: &str = "libicuuc";
  
 -        // `dladdr` is specific to GNU's libc unfortunately.
 -        let mut info: libc::Dl_info = mem::zeroed();
 -        let ret = libc::dladdr(proc, &mut info);
 -        if ret == 0 {
-+            if let Ok(s) = dlpi_str.to_str() {
-+                if s.contains("libicuuc") {
-+                    *file_path = dlpi_str.as_ptr();
-+                    return 1;
+-            return res;
++        #[allow(unused_mut)]
++        let mut dli_fname: Option<&str> = None;
++
++        #[cfg(not(target_vendor = "apple"))]
++        {
++            extern "C" fn dl_callback(
++                info: *mut libc::dl_phdr_info,
++                _size: usize,
++                data: *mut c_void,
++            ) -> c_int {
++                let file_path = unsafe { &mut *(data as *mut Option<&str>) };
++
++                if info.is_null() || unsafe { (*info).dlpi_name.is_null() } {
++                    return 0;
 +                }
++
++                let dlpi_str = unsafe { std::ffi::CStr::from_ptr((*info).dlpi_name) };
++
++                if let Ok(s) = dlpi_str.to_str() {
++                    if s.contains(TARGET_LIBICU) {
++                        *file_path = Some(s);
++                        return 1;
++                    }
++                }
++
++                0
 +            }
 +
-+            0
-+        }
-+
-+        let ret = libc::dl_iterate_phdr(
++            let ret = libc::dl_iterate_phdr(
 +                Some(dl_callback),
-+                &mut dli_fname as *mut *const c_char as *mut c_void
++                &mut dli_fname as *mut Option<&str> as *mut c_void,
 +            );
 +
-+        if ret == 0 || dli_fname.is_null() {
-             return res;
++            if ret == 0 {
++                return res;
++            }
          }
  
 -        // The library path is in `info.dli_fname`.
 -        let path = match std::ffi::CStr::from_ptr(info.dli_fname).to_str() {
+-            Ok(name) => name,
+-            Err(_) => return res,
++        #[cfg(target_vendor = "apple")]
++        {
++            let count = mach2::dyld::_dyld_image_count();
++            for i in 0..count {
++                let name_ptr = mach2::dyld::_dyld_get_image_name(i);
++                if !name_ptr.is_null() {
++                    let dlpi_str = std::ffi::CStr::from_ptr(name_ptr);
++                    if let Ok(s) = dlpi_str.to_str() {
++                        if s.contains(TARGET_LIBICU) {
++                            dli_fname = Some(s);
++                            break;
++                        }
++                    }
++                }
++            }
++        }
 +
-+        // The library path is in `dli_fname`.
-+        let path = match std::ffi::CStr::from_ptr(dli_fname).to_str() {
-             Ok(name) => name,
-             Err(_) => return res,
++        let path = match dli_fname {
++            Some(name) => name,
++            None => return res,
          };
+ 
+         let path = match std::fs::read_link(path) {
+@@ -467,12 +507,19 @@ pub fn icu_detect_renaming_suffix(arena: &Arena, handle: NonNull<c_void>) -> BSt
+         };
+ 
+         // I'm going to assume it's something like "libicuuc.so.76.1".
++        // for apple libicuuc.78.3.dylib
+         let path = path.into_os_string();
+         let path = path.to_string_lossy();
++        #[cfg(not(target_vendor = "apple"))]
+         let suffix_start = match path.rfind(".so.") {
+             Some(pos) => pos + 4,
+             None => return res,
+         };
++        #[cfg(target_vendor = "apple")]
++        let suffix_start = match path.find(TARGET_LIBICU) {
++            Some(pos) => pos + TARGET_LIBICU.len() + 1,
++            None => return res,
++        };
+         let version = &path[suffix_start..];
+         let version_end = version.find('.').unwrap_or(version.len());
+         let version = &version[..version_end];
