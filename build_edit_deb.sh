@@ -73,7 +73,7 @@ if [ -n "$USER_CROSS_GCC" ] && [ -n "$USER_CROSS_RUST_ARCH_TARGET" ]; then
     rustup target add $CROSS_RUST_ARCH_TARGET
 fi
 
-CROSS_RUST_FLAG="-C linker=$CROSS_GCC"
+CROSS_RUST_FLAG="-C linker=$CROSS_GCC -C link-arg=-Wl,--wrap=__cxa_thread_atexit_impl"
 
 
 EDIT_TAR_GZ="https://github.com/microsoft/edit/archive/refs/tags/v2.0.0.tar.gz"
