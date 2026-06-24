@@ -107,6 +107,7 @@ sed -i '/\[package\]/a description = "A simple editor for simple needs"' $SCRIPT
 
 # fix icu autodetect
 cd $SCRIPT_DIR/$EDIT_DIR && patch -p1 < $SCRIPT_DIR/patch_icu_autodetect_gnu.diff
+cd $SCRIPT_DIR/$EDIT_DIR && patch -p1 < $SCRIPT_DIR/patch_no_icu.diff
 
 # build edit
 echo "Build edit"
